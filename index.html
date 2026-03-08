@@ -1,0 +1,1184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>FUJIFILM X100VI Simulator</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Space+Mono:wght@400;700&family=Noto+Sans+JP:wght@300;400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f0ede6;
+  --bg2: #e8e3da;
+  --surface: #faf8f4;
+  --fuji-silver: #c8c4bc;
+  --fuji-black: #1c1a18;
+  --fuji-charcoal: #2e2c28;
+  --fuji-red: #c8362a;
+  --fuji-gold: #a07840;
+  --fuji-cream: #f5f0e8;
+  --text-dark: #1c1a18;
+  --text-mid: #6a6560;
+  --text-light: #9a9590;
+  --border: rgba(28,26,24,0.12);
+  --shadow: rgba(28,26,24,0.15);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+html, body {
+  width:100%; min-height:100vh;
+  background: var(--bg);
+  color: var(--text-dark);
+  font-family: 'Space Mono', monospace;
+  overscroll-behavior: none;
+}
+
+/* GRAIN OVERLAY */
+body::before {
+  content:'';
+  position:fixed; inset:0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events:none; z-index:999; opacity:0.6;
+}
+
+/* ── HEADER ── */
+.header {
+  background: var(--fuji-black);
+  padding: 0 16px;
+  display: flex; align-items: center; justify-content: space-between;
+  height: 56px;
+  position: sticky; top:0; z-index:100;
+  border-bottom: 1px solid #000;
+}
+
+.fuji-logo {
+  font-family: 'Playfair Display', serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 6px;
+  color: #fff;
+  text-transform: uppercase;
+}
+
+.model-name {
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: var(--fuji-gold);
+  font-family: 'Space Mono', monospace;
+}
+
+.header-right {
+  text-align: right;
+}
+
+.sensor-chip {
+  background: var(--fuji-red);
+  color: #fff;
+  font-size: 8px;
+  letter-spacing: 1.5px;
+  padding: 3px 8px;
+  border-radius: 2px;
+  font-family: 'Space Mono', monospace;
+}
+
+/* ── VIEWFINDER ── */
+.viewfinder-wrap {
+  position: relative;
+  margin: 16px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--fuji-black);
+  box-shadow: 0 8px 32px var(--shadow), 0 2px 4px rgba(0,0,0,0.2);
+  aspect-ratio: 3/2;
+  cursor: pointer;
+}
+
+canvas#main {
+  width: 100%; height: 100%;
+  display: block;
+}
+
+/* Viewfinder corners */
+.vf-corner {
+  position: absolute;
+  width: 20px; height: 20px;
+  border-color: rgba(255,255,255,0.5);
+  border-style: solid;
+  pointer-events: none;
+}
+.vf-corner.tl { top:10px; left:10px; border-width:1px 0 0 1px; }
+.vf-corner.tr { top:10px; right:10px; border-width:1px 1px 0 0; }
+.vf-corner.bl { bottom:10px; left:10px; border-width:0 0 1px 1px; }
+.vf-corner.br { bottom:10px; right:10px; border-width:0 1px 1px 0; }
+
+/* AF point */
+.af-point {
+  position: absolute;
+  top:50%; left:50%;
+  transform: translate(-50%,-50%);
+  width: 44px; height: 30px;
+  border: 1px solid rgba(255,200,0,0.7);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+  box-shadow: 0 0 8px rgba(255,200,0,0.3);
+}
+
+.viewfinder-wrap:hover .af-point { opacity: 1; }
+
+/* OVF data overlay */
+.ovf-data {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  display: flex; justify-content: space-between; align-items: flex-end;
+  padding: 8px 12px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.55));
+  pointer-events: none;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: rgba(255,255,255,0.85);
+}
+
+.ovf-left, .ovf-right { display:flex; flex-direction:column; gap:2px; }
+.ovf-right { text-align: right; }
+
+.ovf-sim {
+  font-size: 11px; font-weight: 700;
+  color: rgba(255,220,80,0.95);
+  letter-spacing: 2px;
+}
+
+/* Empty state */
+.empty-state {
+  position: absolute; inset:0;
+  display: flex; flex-direction:column; align-items:center; justify-content:center;
+  gap: 14px;
+  cursor: pointer;
+  background: #0d0c0a;
+  transition: background 0.3s;
+}
+.empty-state:hover { background: #141210; }
+
+.shutter-icon {
+  width: 64px; height: 64px;
+  border: 1.5px solid rgba(255,255,255,0.15);
+  border-radius: 50%;
+  display: flex; align-items:center; justify-content:center;
+  transition: all 0.3s;
+  position: relative;
+}
+
+.shutter-icon::before {
+  content:'';
+  position: absolute;
+  width: 48px; height: 48px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 50%;
+}
+
+.empty-state:hover .shutter-icon {
+  border-color: rgba(200,54,42,0.5);
+  box-shadow: 0 0 20px rgba(200,54,42,0.2);
+}
+
+.empty-label {
+  font-size: 9px; letter-spacing: 4px;
+  color: rgba(255,255,255,0.35);
+  text-transform: uppercase;
+}
+
+.empty-sub {
+  font-size: 8px; letter-spacing: 2px;
+  color: rgba(255,255,255,0.18);
+}
+
+/* ── FILM SIMULATIONS ── */
+.section {
+  margin: 0 16px 16px;
+}
+
+.section-header {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 10px;
+}
+
+.section-label {
+  font-size: 8px; letter-spacing: 3px;
+  color: var(--text-light);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.section-line {
+  flex: 1; height: 1px;
+  background: var(--border);
+}
+
+/* Film Sim scroll */
+.film-scroll {
+  display: flex; gap: 8px;
+  overflow-x: auto; padding-bottom: 4px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.film-scroll::-webkit-scrollbar { display: none; }
+
+.film-card {
+  flex-shrink: 0;
+  width: 68px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 6px 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.film-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--film-color, #888);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.film-card.active {
+  border-color: var(--film-color, #888);
+  background: var(--fuji-cream);
+}
+.film-card.active::before { opacity: 1; }
+
+.film-swatch {
+  width: 36px; height: 24px;
+  border-radius: 2px;
+  margin: 0 auto 5px;
+  border: 1px solid rgba(0,0,0,0.08);
+}
+
+.film-name {
+  font-size: 7px; letter-spacing: 0.5px;
+  color: var(--text-dark);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.film-sub {
+  font-size: 6px; letter-spacing: 0.3px;
+  color: var(--text-light);
+  margin-top: 1px;
+}
+
+/* ── CONTROLS ── */
+.controls-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 0 16px 16px;
+}
+
+.control-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.ctrl-label {
+  font-size: 7px; letter-spacing: 2.5px;
+  color: var(--text-light);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+
+.ctrl-value {
+  font-size: 13px; font-weight: 700;
+  color: var(--fuji-red);
+  font-family: 'Space Mono', monospace;
+}
+
+input[type=range] {
+  -webkit-appearance: none;
+  width: 100%; height: 2px;
+  border-radius: 2px;
+  background: var(--border);
+  outline: none;
+  cursor: pointer;
+  accent-color: var(--fuji-red);
+}
+
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--fuji-black);
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 0 1.5px var(--fuji-charcoal), 0 2px 6px rgba(0,0,0,0.3);
+  transition: transform 0.15s;
+}
+input[type=range]:active::-webkit-slider-thumb { transform: scale(1.25); }
+
+/* ── GRAIN & CLARITY ── */
+.full-ctrl {
+  margin: 0 16px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.three-col { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
+
+/* ── TOGGLES ── */
+.toggle-row {
+  margin: 0 16px 16px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.toggle-btn {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 4px;
+  padding: 10px 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'Space Mono', monospace;
+  font-size: 7.5px;
+  letter-spacing: 0.5px;
+  color: var(--text-mid);
+  text-align: center;
+  line-height: 1.4;
+}
+
+.toggle-btn.active {
+  background: var(--fuji-black);
+  border-color: var(--fuji-black);
+  color: #fff;
+}
+
+.toggle-icon { font-size: 14px; display:block; margin-bottom:3px; }
+
+/* ── EXIF STRIP ── */
+.exif-strip {
+  margin: 0 16px 16px;
+  background: var(--fuji-black);
+  border-radius: 6px;
+  padding: 12px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.exif-item { text-align:center; }
+.exif-key { font-size: 6px; letter-spacing: 2px; color: rgba(255,255,255,0.35); display:block; }
+.exif-val { font-size: 13px; font-weight:700; color: rgba(255,255,255,0.9); letter-spacing:1px; }
+.exif-sep { width:1px; height:24px; background: rgba(255,255,255,0.1); flex-shrink:0; }
+
+/* ── ACTIONS ── */
+.actions {
+  margin: 0 16px 24px;
+  display: flex; gap: 10px;
+}
+
+.btn-load {
+  flex:1;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  padding: 14px;
+  font-family: 'Space Mono', monospace;
+  font-size: 9px; letter-spacing: 2px;
+  color: var(--text-dark);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-load:hover { border-color: var(--fuji-charcoal); }
+
+.btn-save {
+  flex:2;
+  background: var(--fuji-black);
+  border: none;
+  border-radius: 6px;
+  padding: 14px;
+  font-family: 'Space Mono', monospace;
+  font-size: 9px; letter-spacing: 2.5px;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 16px rgba(28,26,24,0.3);
+}
+.btn-save:hover { background: var(--fuji-charcoal); }
+.btn-save:disabled { background: #ccc; color: #999; box-shadow:none; cursor:not-allowed; }
+
+#fileInput { display:none; }
+
+/* ── SCROLL MOMENTUM ── */
+.scroll-body { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="fuji-logo">Fujifilm</div>
+    <div class="model-name">X100VI</div>
+  </div>
+  <div class="header-right">
+    <div class="sensor-chip">X-TRANS V · 40.2MP</div>
+    <div style="font-size:7px;letter-spacing:1.5px;color:var(--fuji-gold);margin-top:4px;text-align:right;">FUJINON 23mm f/2 WR</div>
+  </div>
+</div>
+
+<!-- VIEWFINDER -->
+<div class="viewfinder-wrap" id="vfWrap" onclick="triggerLoad()">
+  <canvas id="main"></canvas>
+  <div class="vf-corner tl"></div>
+  <div class="vf-corner tr"></div>
+  <div class="vf-corner bl"></div>
+  <div class="vf-corner br"></div>
+  <div class="af-point"></div>
+  <div class="ovf-data" id="ovfData" style="display:none">
+    <div class="ovf-left">
+      <span class="ovf-sim" id="ovfSim">PROVIA</span>
+      <span>ISO 640</span>
+    </div>
+    <div class="ovf-right">
+      <span>23mm f/2</span>
+      <span id="ovfGrain">GRAIN: OFF</span>
+    </div>
+  </div>
+  <div class="empty-state" id="emptyState">
+    <div class="shutter-icon">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+        <circle cx="14" cy="14" r="6" stroke="rgba(255,255,255,0.4)" stroke-width="1.2"/>
+        <line x1="14" y1="2" x2="14" y2="8" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+        <line x1="14" y1="20" x2="14" y2="26" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+        <line x1="2" y1="14" x2="8" y2="14" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+        <line x1="20" y1="14" x2="26" y2="14" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+      </svg>
+    </div>
+    <div class="empty-label">Cargar Fotografía</div>
+    <div class="empty-sub">JPEG · PNG · HEIC</div>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept="image/*">
+
+<!-- FILM SIMULATIONS -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-label">Film Simulation</span>
+    <div class="section-line"></div>
+  </div>
+  <div class="film-scroll" id="filmScroll">
+    <!-- cards injected by JS -->
+  </div>
+</div>
+
+<!-- MAIN CONTROLS -->
+<div class="controls-grid">
+  <div class="control-box">
+    <div class="ctrl-label">BOKEH / BLUR <span class="ctrl-value" id="vBlur">0</span></div>
+    <input type="range" id="sBlur" min="0" max="100" value="0" oninput="render()">
+  </div>
+  <div class="control-box">
+    <div class="ctrl-label">VIÑETA <span class="ctrl-value" id="vVig">35</span></div>
+    <input type="range" id="sVig" min="0" max="100" value="35" oninput="render()">
+  </div>
+  <div class="control-box">
+    <div class="ctrl-label">EXPOSICIÓN <span class="ctrl-value" id="vExp">0</span></div>
+    <input type="range" id="sExp" min="-100" max="100" value="0" oninput="render()">
+  </div>
+  <div class="control-box">
+    <div class="ctrl-label">CONTRASTE <span class="ctrl-value" id="vCon">0</span></div>
+    <input type="range" id="sCon" min="-100" max="100" value="0" oninput="render()">
+  </div>
+</div>
+
+<div class="full-ctrl">
+  <div class="section-header" style="margin-bottom:12px">
+    <span class="section-label">Highlight · Shadow · Color</span>
+    <div class="section-line"></div>
+  </div>
+  <div class="three-col">
+    <div>
+      <div class="ctrl-label">ALTAS LUCES <span class="ctrl-value" id="vHi">0</span></div>
+      <input type="range" id="sHi" min="-100" max="100" value="0" oninput="render()">
+    </div>
+    <div>
+      <div class="ctrl-label">SOMBRAS <span class="ctrl-value" id="vSh">0</span></div>
+      <input type="range" id="sSh" min="-100" max="100" value="0" oninput="render()">
+    </div>
+    <div>
+      <div class="ctrl-label">COLOR <span class="ctrl-value" id="vSat">0</span></div>
+      <input type="range" id="sSat" min="-100" max="100" value="0" oninput="render()">
+    </div>
+  </div>
+</div>
+
+<!-- TOGGLES -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-label">Efectos Ópticos</span>
+    <div class="section-line"></div>
+  </div>
+</div>
+<div class="toggle-row">
+  <button class="toggle-btn" data-fx="grain" onclick="toggleFx(this)">
+    <span class="toggle-icon">⣿</span>GRANO
+  </button>
+  <button class="toggle-btn" data-fx="clarity" onclick="toggleFx(this)">
+    <span class="toggle-icon">◈</span>CLARITY
+  </button>
+  <button class="toggle-btn" data-fx="flare" onclick="toggleFx(this)">
+    <span class="toggle-icon">✦</span>FLARE
+  </button>
+  <button class="toggle-btn" data-fx="halation" onclick="toggleFx(this)">
+    <span class="toggle-icon">◉</span>HALACIÓN
+  </button>
+  <button class="toggle-btn" data-fx="soften" onclick="toggleFx(this)">
+    <span class="toggle-icon">◌</span>SUAVIZAR
+  </button>
+  <button class="toggle-btn" data-fx="bw" onclick="toggleFx(this)">
+    <span class="toggle-icon">◑</span>ACROS
+  </button>
+</div>
+
+<!-- EXIF -->
+<div class="exif-strip">
+  <div class="exif-item">
+    <span class="exif-key">CÁMARA</span>
+    <span class="exif-val" style="font-size:10px">X100VI</span>
+  </div>
+  <div class="exif-sep"></div>
+  <div class="exif-item">
+    <span class="exif-key">LENTE</span>
+    <span class="exif-val" style="font-size:10px">23mm f/2</span>
+  </div>
+  <div class="exif-sep"></div>
+  <div class="exif-item">
+    <span class="exif-key">SENSOR</span>
+    <span class="exif-val" style="font-size:10px">40MP</span>
+  </div>
+  <div class="exif-sep"></div>
+  <div class="exif-item">
+    <span class="exif-key">SIM</span>
+    <span class="exif-val" id="exifSim" style="font-size:10px">PROVIA</span>
+  </div>
+</div>
+
+<!-- ACTIONS -->
+<div class="actions">
+  <button class="btn-load" onclick="triggerLoad()">CARGAR</button>
+  <button class="btn-save" id="btnSave" disabled onclick="saveImage()">GUARDAR FOTO ↓</button>
+</div>
+
+<script>
+// ─── FILM SIMULATIONS ─────────────────────────────────────────────────────────
+const FILMS = [
+  {
+    id: 'provia', name: 'PROVIA', sub: 'Standard', color: '#4a7eb5',
+    swatch: 'linear-gradient(135deg,#6ab0f5,#4a7eb5)',
+    fn: (r,g,b) => ({
+      r: clamp(r * 1.0),
+      g: clamp(g * 1.0),
+      b: clamp(b * 1.02)
+    })
+  },
+  {
+    id: 'velvia', name: 'VELVIA', sub: 'Vívido', color: '#c84040',
+    swatch: 'linear-gradient(135deg,#f06060,#c84040)',
+    fn: (r,g,b) => {
+      const lum = 0.299*r + 0.587*g + 0.114*b;
+      return {
+        r: clamp(lum + (r-lum)*1.45 + 8),
+        g: clamp(lum + (g-lum)*1.45),
+        b: clamp(lum + (b-lum)*1.25)
+      };
+    }
+  },
+  {
+    id: 'astia', name: 'ASTIA', sub: 'Suave', color: '#b8907a',
+    swatch: 'linear-gradient(135deg,#e8b89a,#b8907a)',
+    fn: (r,g,b) => {
+      const lum = 0.299*r + 0.587*g + 0.114*b;
+      return {
+        r: clamp(lum + (r-lum)*0.88 + 6),
+        g: clamp(lum + (g-lum)*0.85 + 4),
+        b: clamp(lum + (b-lum)*0.80 + 8)
+      };
+    }
+  },
+  {
+    id: 'classic_chrome', name: 'CLASSIC', sub: 'Chrome', color: '#6a7060',
+    swatch: 'linear-gradient(135deg,#9aa090,#6a7060)',
+    fn: (r,g,b) => {
+      const lum = 0.299*r + 0.587*g + 0.114*b;
+      return {
+        r: clamp(lum*0.42 + r*0.58 + 4),
+        g: clamp(lum*0.50 + g*0.50),
+        b: clamp(lum*0.45 + b*0.55 - 4)
+      };
+    }
+  },
+  {
+    id: 'classic_neg', name: 'CLASSIC', sub: 'Neg Hi', color: '#4a6060',
+    swatch: 'linear-gradient(135deg,#6a9090,#4a6060)',
+    fn: (r,g,b) => ({
+      r: clamp(r*0.96 + 5),
+      g: clamp(g*0.92 + 8),
+      b: clamp(b*1.08 - 5)
+    })
+  },
+  {
+    id: 'eterna', name: 'ETERNA', sub: 'Cinema', color: '#3a4858',
+    swatch: 'linear-gradient(135deg,#5a7088,#3a4858)',
+    fn: (r,g,b) => {
+      const lum = 0.299*r + 0.587*g + 0.114*b;
+      return {
+        r: clamp(lum*0.22 + r*0.78 - 2 + shadow(r,12)),
+        g: clamp(lum*0.20 + g*0.80 + shadow(g,10)),
+        b: clamp(lum*0.18 + b*0.82 + 6 + shadow(b,8))
+      };
+    }
+  },
+  {
+    id: 'nostalgic', name: 'NOSTALGIC', sub: 'Neg', color: '#c89050',
+    swatch: 'linear-gradient(135deg,#f0c080,#c89050)',
+    fn: (r,g,b) => ({
+      r: clamp(r*1.06 + 8),
+      g: clamp(g*0.97 + 4),
+      b: clamp(b*0.82 - 6)
+    })
+  },
+  {
+    id: 'acros', name: 'ACROS', sub: 'B&N', color: '#404040',
+    swatch: 'linear-gradient(135deg,#888,#404040)',
+    fn: (r,g,b) => {
+      const lum = 0.212*r + 0.701*g + 0.087*b; // Fuji ACROS weighting
+      const c = sCurve(lum/255)*255;
+      return { r: c, g: c, b: c };
+    }
+  },
+];
+
+function shadow(v, lift) { return lift * (1 - v/255); }
+function sCurve(t) {
+  // Subtle S-curve for ACROS
+  return t < 0.5
+    ? 2*t*t
+    : -1 + (4 - 2*t)*t;
+}
+function clamp(v) { return Math.min(255, Math.max(0, Math.round(v))); }
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let img = null;
+let currentFilm = 'provia';
+let activeFx = new Set();
+let animFrame = null;
+
+// ─── BUILD FILM CARDS ─────────────────────────────────────────────────────────
+const filmScroll = document.getElementById('filmScroll');
+FILMS.forEach(f => {
+  const card = document.createElement('div');
+  card.className = 'film-card' + (f.id === 'provia' ? ' active' : '');
+  card.style.setProperty('--film-color', f.color);
+  card.dataset.id = f.id;
+  card.innerHTML = `
+    <div class="film-swatch" style="background:${f.swatch}"></div>
+    <div class="film-name">${f.name}</div>
+    <div class="film-sub">${f.sub}</div>`;
+  card.onclick = () => selectFilm(f.id, card);
+  filmScroll.appendChild(card);
+});
+
+function selectFilm(id, card) {
+  document.querySelectorAll('.film-card').forEach(c => c.classList.remove('active'));
+  card.classList.add('active');
+  currentFilm = id;
+  document.getElementById('ovfSim').textContent = FILMS.find(f=>f.id===id).name;
+  document.getElementById('exifSim').textContent = FILMS.find(f=>f.id===id).name;
+  if (img) render();
+}
+
+// ─── FX TOGGLES ───────────────────────────────────────────────────────────────
+function toggleFx(btn) {
+  const fx = btn.dataset.fx;
+  if (activeFx.has(fx)) { activeFx.delete(fx); btn.classList.remove('active'); }
+  else { activeFx.add(fx); btn.classList.add('active'); }
+  if (img) render();
+}
+
+// ─── LOAD IMAGE ───────────────────────────────────────────────────────────────
+function triggerLoad() {
+  document.getElementById('fileInput').click();
+}
+
+document.getElementById('fileInput').addEventListener('change', e => {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const i = new Image();
+    i.onload = () => {
+      img = i;
+      document.getElementById('emptyState').style.display = 'none';
+      document.getElementById('ovfData').style.display = 'flex';
+      document.getElementById('vfWrap').style.cursor = 'default';
+      document.getElementById('btnSave').disabled = false;
+      document.getElementById('btnSave').textContent = `PNG ${i.naturalWidth}×${i.naturalHeight} ↓`;
+      resizeCanvas();
+      render();
+    };
+    i.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+const canvas = document.getElementById('main');
+const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+function resizeCanvas() {
+  const wrap = document.getElementById('vfWrap');
+  const W = wrap.clientWidth * (window.devicePixelRatio || 1);
+  const H = W * (img.height / img.width);
+  canvas.width = W; canvas.height = H;
+  canvas.style.width = wrap.clientWidth + 'px';
+  canvas.style.height = (wrap.clientWidth * img.height / img.width) + 'px';
+}
+
+// Update display labels
+function updateLabels() {
+  const ids = ['Blur','Vig','Exp','Con','Hi','Sh','Sat'];
+  const sliders = ['sBlur','sVig','sExp','sCon','sHi','sSh','sSat'];
+  const vals = ['vBlur','vVig','vExp','vCon','vHi','vSh','vSat'];
+  sliders.forEach((s, i) => {
+    document.getElementById(vals[i]).textContent = document.getElementById(s).value;
+  });
+  document.getElementById('ovfGrain').textContent = 'GRAIN: ' + (activeFx.has('grain') ? 'ON' : 'OFF');
+}
+
+// ─── RENDER PIPELINE ──────────────────────────────────────────────────────────
+function render() {
+  updateLabels();
+  if (!img) return;
+  if (animFrame) cancelAnimationFrame(animFrame);
+  animFrame = requestAnimationFrame(doRender);
+}
+
+function doRender() {
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  ctx.drawImage(img, 0, 0, W, H);
+
+  const blur = +document.getElementById('sBlur').value;
+  const vig  = +document.getElementById('sVig').value;
+  const exp  = +document.getElementById('sExp').value;
+  const con  = +document.getElementById('sCon').value;
+  const hi   = +document.getElementById('sHi').value;
+  const sh   = +document.getElementById('sSh').value;
+  const sat  = +document.getElementById('sSat').value;
+
+  // Pixel operations
+  applyPixelFx(W, H, exp, con, hi, sh, sat);
+
+  // Depth of field bokeh
+  if (blur > 0) applyBokeh(W, H, blur);
+
+  // Vignette
+  if (vig > 0) applyVignette(W, H, vig);
+
+  // Lens flare (Fujinon 23mm f/2 characteristic)
+  if (activeFx.has('flare')) applyFlare(W, H);
+
+  // Halation (film highlight bloom)
+  if (activeFx.has('halation')) applyHalation(W, H);
+
+  // Film grain (X-Trans sensor pattern)
+  if (activeFx.has('grain')) applyGrain(W, H);
+}
+
+// ─── PIXEL FX ─────────────────────────────────────────────────────────────────
+function applyPixelFx(W, H, exp, con, hi, sh, sat) {
+  const film = FILMS.find(f => f.id === currentFilm);
+  const imageData = ctx.getImageData(0, 0, W, H);
+  const d = imageData.data;
+
+  const expF = exp / 100;
+  const conF = con / 100;
+  const satF = sat / 100;
+  const hiF  = hi / 100;
+  const shF  = sh / 100;
+
+  // Build LUT for speed
+  const lut = new Uint8Array(256 * 3);
+  for (let i = 0; i < 256; i++) {
+    let r = i, g = i, b = i;
+
+    // Apply film sim (greyscale approach for LUT – real apply per pixel below)
+    // Just store index
+    lut[i*3]   = i;
+    lut[i*3+1] = i;
+    lut[i*3+2] = i;
+  }
+
+  const isBW = activeFx.has('bw') || currentFilm === 'acros';
+  const soften = activeFx.has('soften');
+  const clarity = activeFx.has('clarity');
+
+  for (let i = 0; i < d.length; i += 4) {
+    let r = d[i], g = d[i+1], b = d[i+2];
+
+    // Film simulation
+    const out = film.fn(r, g, b);
+    r = out.r; g = out.g; b = out.b;
+
+    // Exposure
+    if (exp !== 0) {
+      const ef = expF > 0 ? 1 + expF * 1.5 : 1 + expF;
+      r = clamp(r * ef); g = clamp(g * ef); b = clamp(b * ef);
+    }
+
+    // Contrast
+    if (con !== 0) {
+      r = applyContrast(r, conF);
+      g = applyContrast(g, conF);
+      b = applyContrast(b, conF);
+    }
+
+    // Highlight recovery / boost
+    if (hi !== 0) {
+      const lum = 0.299*r + 0.587*g + 0.114*b;
+      const t = Math.max(0, (lum - 160) / 95); // 0 at mid, 1 at 255
+      const adj = hi * 0.6 * t;
+      r = clamp(r + adj); g = clamp(g + adj); b = clamp(b + adj);
+    }
+
+    // Shadow lift / pull
+    if (sh !== 0) {
+      const lum = 0.299*r + 0.587*g + 0.114*b;
+      const t = Math.max(0, 1 - lum / 100);
+      const adj = sh * 0.5 * t;
+      r = clamp(r + adj); g = clamp(g + adj); b = clamp(b + adj);
+    }
+
+    // Saturation / Color
+    if (sat !== 0) {
+      const lum = 0.299*r + 0.587*g + 0.114*b;
+      const sf = 1 + satF;
+      r = clamp(lum + (r-lum)*sf);
+      g = clamp(lum + (g-lum)*sf);
+      b = clamp(lum + (b-lum)*sf);
+    }
+
+    // ACROS override
+    if (isBW && currentFilm !== 'acros') {
+      const lum = 0.213*r + 0.715*g + 0.072*b;
+      r = g = b = clamp(lum);
+    }
+
+    // Clarity (micro-contrast boost)
+    if (clarity) {
+      const lum = 0.299*r + 0.587*g + 0.114*b;
+      const boost = (lum - 128) * 0.15;
+      r = clamp(r + boost); g = clamp(g + boost); b = clamp(b + boost);
+    }
+
+    // Soften
+    if (soften) {
+      r = clamp(r * 0.95 + 12);
+      g = clamp(g * 0.95 + 10);
+      b = clamp(b * 0.95 + 14);
+    }
+
+    d[i] = r; d[i+1] = g; d[i+2] = b;
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+}
+
+function applyContrast(v, c) {
+  v = v / 255;
+  if (c > 0) {
+    v = v < 0.5 ? 0.5 * Math.pow(2*v, 1 + c * 1.2) : 1 - 0.5 * Math.pow(2*(1-v), 1 + c * 1.2);
+  } else {
+    v = v + c * 0.5 * v * (1-v) * 4;
+  }
+  return clamp(v * 255);
+}
+
+// ─── BOKEH (Fujinon 23mm characteristic smooth bokeh) ─────────────────────────
+function applyBokeh(W, H, amount) {
+  const cx = W * 0.5, cy = H * 0.45;
+  const focusRadius = Math.min(W, H) * 0.25;
+
+  // Grab sharp center
+  const sharpData = ctx.getImageData(0, 0, W, H);
+
+  // Apply blur to whole canvas
+  const radius = Math.round((amount / 100) * 22);
+  ctx.filter = `blur(${radius}px)`;
+  ctx.drawImage(canvas, 0, 0);
+  ctx.filter = 'none';
+  const blurData = ctx.getImageData(0, 0, W, H);
+
+  // Compose: sharp center, blurred edges
+  const out = ctx.createImageData(W, H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const idx = (y * W + x) * 4;
+      const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
+      let t = Math.max(0, Math.min(1, (dist - focusRadius) / (focusRadius * 1.4)));
+      t = t * t * (3 - 2 * t); // smoothstep
+
+      out.data[idx]   = sharpData.data[idx]   * (1 - t) + blurData.data[idx]   * t;
+      out.data[idx+1] = sharpData.data[idx+1] * (1 - t) + blurData.data[idx+1] * t;
+      out.data[idx+2] = sharpData.data[idx+2] * (1 - t) + blurData.data[idx+2] * t;
+      out.data[idx+3] = 255;
+    }
+  }
+  ctx.putImageData(out, 0, 0);
+}
+
+// ─── VIGNETTE ─────────────────────────────────────────────────────────────────
+function applyVignette(W, H, amount) {
+  const cx = W / 2, cy = H / 2;
+  const r = Math.sqrt(cx * cx + cy * cy);
+  const alpha = (amount / 100) * 0.78;
+  const g = ctx.createRadialGradient(cx, cy, r * 0.38, cx, cy, r * 1.05);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(0.7, `rgba(0,0,0,${alpha * 0.3})`);
+  g.addColorStop(1, `rgba(0,0,0,${alpha})`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+// ─── LENS FLARE (Fujinon characteristic) ──────────────────────────────────────
+function applyFlare(W, H) {
+  // Subtle anamorphic-ish streak
+  const cx = W * 0.6, cy = H * 0.3;
+  ctx.save();
+  ctx.globalAlpha = 0.08;
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, W * 0.3);
+  g.addColorStop(0, '#ffe8c0');
+  g.addColorStop(0.3, '#ffcc80');
+  g.addColorStop(1, 'transparent');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  // Streak
+  ctx.globalAlpha = 0.04;
+  const streak = ctx.createLinearGradient(0, cy, W, cy);
+  streak.addColorStop(0, 'transparent');
+  streak.addColorStop(0.5, '#ffe0a0');
+  streak.addColorStop(1, 'transparent');
+  ctx.fillStyle = streak;
+  ctx.fillRect(0, cy - H*0.04, W, H*0.08);
+  ctx.restore();
+}
+
+// ─── HALATION (film highlight bloom) ──────────────────────────────────────────
+function applyHalation(W, H) {
+  const imageData = ctx.getImageData(0, 0, W, H);
+  const d = imageData.data;
+  const hal = ctx.createImageData(W, H);
+  const hd = hal.data;
+
+  for (let i = 0; i < d.length; i += 4) {
+    const lum = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
+    if (lum > 210) {
+      const t = (lum - 210) / 45;
+      hd[i]   = clamp(d[i] + 80 * t);
+      hd[i+1] = clamp(d[i+1] * (1 - t * 0.4));
+      hd[i+2] = clamp(d[i+2] * (1 - t * 0.6));
+      hd[i+3] = clamp(200 * t);
+    }
+  }
+
+  // Blur the halation layer
+  const tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  const tc = tmp.getContext('2d');
+  tc.putImageData(hal, 0, 0);
+  tc.filter = `blur(${Math.round(W * 0.012)}px)`;
+  tc.drawImage(tmp, 0, 0);
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  ctx.globalAlpha = 0.45;
+  ctx.drawImage(tmp, 0, 0);
+  ctx.restore();
+}
+
+// ─── GRAIN (X-Trans V sensor characteristic) ──────────────────────────────────
+function applyGrain(W, H) {
+  const imageData = ctx.getImageData(0, 0, W, H);
+  const d = imageData.data;
+  const grainAmount = 18;
+
+  for (let i = 0; i < d.length; i += 4) {
+    const lum = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+    // More grain in shadows/mids (X-Trans characteristic)
+    const sensitivity = 1 - Math.pow(lum / 255, 1.5);
+    const noise = (Math.random() - 0.5) * grainAmount * sensitivity * 2;
+    d[i]   = clamp(d[i]   + noise);
+    d[i+1] = clamp(d[i+1] + noise * 0.95);
+    d[i+2] = clamp(d[i+2] + noise * 0.9);
+  }
+  ctx.putImageData(imageData, 0, 0);
+}
+
+// ─── SAVE — MÁXIMA CALIDAD (resolución original completa) ─────────────────────
+async function saveImage() {
+  const btn = document.getElementById('btnSave');
+  btn.disabled = true;
+  btn.textContent = 'PROCESANDO…';
+
+  // Pequeño delay para que el UI actualice
+  await new Promise(r => setTimeout(r, 60));
+
+  try {
+    // Canvas offscreen a la resolución COMPLETA de la imagen original
+    const OW = img.naturalWidth;
+    const OH = img.naturalHeight;
+
+    const offscreen = document.createElement('canvas');
+    offscreen.width  = OW;
+    offscreen.height = OH;
+    const oc = offscreen.getContext('2d', { willReadFrequently: true });
+
+    // Dibujar imagen original en tamaño completo
+    oc.drawImage(img, 0, 0, OW, OH);
+
+    // Leer parámetros actuales
+    const blur = +document.getElementById('sBlur').value;
+    const vig  = +document.getElementById('sVig').value;
+    const exp  = +document.getElementById('sExp').value;
+    const con  = +document.getElementById('sCon').value;
+    const hi   = +document.getElementById('sHi').value;
+    const sh   = +document.getElementById('sSh').value;
+    const sat  = +document.getElementById('sSat').value;
+
+    // Aplicar todos los efectos al canvas offscreen
+    applyPixelFxTo(oc, OW, OH, exp, con, hi, sh, sat);
+    if (blur > 0)               applyBokehTo(oc, OW, OH, blur);
+    if (vig > 0)                applyVignetteTo(oc, OW, OH, vig);
+    if (activeFx.has('flare'))    applyFlareTo(oc, OW, OH);
+    if (activeFx.has('halation')) applyHalationTo(oc, OW, OH);
+    if (activeFx.has('grain'))    applyGrainTo(oc, OW, OH);
+
+    // Exportar como PNG sin pérdida (máxima calidad)
+    const dataUrl = offscreen.toDataURL('image/png');
+    const link = document.createElement('a');
+    link.download = `fujifilm-x100vi-${currentFilm}-${OW}x${OH}.png`;
+    link.href = dataUrl;
+    link.click();
+
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'GUARDAR FOTO ↓';
+  }
+}
+
+// Versiones de efectos que reciben contexto externo (offscreen)
+function applyPixelFxTo(oc, W, H, exp, con, hi, sh, sat) {
+  const film = FILMS.find(f => f.id === currentFilm);
+  const imageData = oc.getImageData(0, 0, W, H);
+  const d = imageData.data;
+  const expF = exp/100, conF = con/100, satF = sat/100, hiF = hi/100, shF = sh/100;
+  const isBW = activeFx.has('bw') || currentFilm === 'acros';
+  const soften = activeFx.has('soften');
+  const clarity = activeFx.has('clarity');
+
+  for (let i = 0; i < d.length; i += 4) {
+    let r = d[i], g = d[i+1], b = d[i+2];
+    const out = film.fn(r, g, b);
+    r = out.r; g = out.g; b = out.b;
+    if (exp !== 0) { const ef = expF > 0 ? 1 + expF * 1.5 : 1 + expF; r=clamp(r*ef); g=clamp(g*ef); b=clamp(b*ef); }
+    if (con !== 0) { r=applyContrast(r,conF); g=applyContrast(g,conF); b=applyContrast(b,conF); }
+    if (hi !== 0) { const lum=0.299*r+0.587*g+0.114*b; const t=Math.max(0,(lum-160)/95); const adj=hi*0.6*t; r=clamp(r+adj); g=clamp(g+adj); b=clamp(b+adj); }
+    if (sh !== 0) { const lum=0.299*r+0.587*g+0.114*b; const t=Math.max(0,1-lum/100); const adj=sh*0.5*t; r=clamp(r+adj); g=clamp(g+adj); b=clamp(b+adj); }
+    if (sat !== 0) { const lum=0.299*r+0.587*g+0.114*b; const sf=1+satF; r=clamp(lum+(r-lum)*sf); g=clamp(lum+(g-lum)*sf); b=clamp(lum+(b-lum)*sf); }
+    if (isBW && currentFilm!=='acros') { const lum=0.213*r+0.715*g+0.072*b; r=g=b=clamp(lum); }
+    if (clarity) { const lum=0.299*r+0.587*g+0.114*b; const boost=(lum-128)*0.15; r=clamp(r+boost); g=clamp(g+boost); b=clamp(b+boost); }
+    if (soften) { r=clamp(r*0.95+12); g=clamp(g*0.95+10); b=clamp(b*0.95+14); }
+    d[i]=r; d[i+1]=g; d[i+2]=b;
+  }
+  oc.putImageData(imageData, 0, 0);
+}
+
+function applyBokehTo(oc, W, H, amount) {
+  const cx=W*0.5, cy=H*0.45, focusRadius=Math.min(W,H)*0.25;
+  const sharpData = oc.getImageData(0,0,W,H);
+  const radius = Math.round((amount/100)*22);
+  oc.filter = `blur(${radius}px)`; oc.drawImage(oc.canvas,0,0); oc.filter='none';
+  const blurData = oc.getImageData(0,0,W,H);
+  const out = oc.createImageData(W,H);
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+    const idx=(y*W+x)*4;
+    const dist=Math.sqrt((x-cx)**2+(y-cy)**2);
+    let t=Math.max(0,Math.min(1,(dist-focusRadius)/(focusRadius*1.4)));
+    t=t*t*(3-2*t);
+    out.data[idx]  =sharpData.data[idx]  *(1-t)+blurData.data[idx]  *t;
+    out.data[idx+1]=sharpData.data[idx+1]*(1-t)+blurData.data[idx+1]*t;
+    out.data[idx+2]=sharpData.data[idx+2]*(1-t)+blurData.data[idx+2]*t;
+    out.data[idx+3]=255;
+  }
+  oc.putImageData(out,0,0);
+}
+
+function applyVignetteTo(oc, W, H, amount) {
+  const cx=W/2,cy=H/2,r=Math.sqrt(cx*cx+cy*cy),alpha=(amount/100)*0.78;
+  const g=oc.createRadialGradient(cx,cy,r*0.38,cx,cy,r*1.05);
+  g.addColorStop(0,'rgba(0,0,0,0)');
+  g.addColorStop(0.7,`rgba(0,0,0,${alpha*0.3})`);
+  g.addColorStop(1,`rgba(0,0,0,${alpha})`);
+  oc.fillStyle=g; oc.fillRect(0,0,W,H);
+}
+
+function applyFlareTo(oc, W, H) {
+  const cx=W*0.6,cy=H*0.3;
+  oc.save(); oc.globalAlpha=0.08;
+  const g=oc.createRadialGradient(cx,cy,0,cx,cy,W*0.3);
+  g.addColorStop(0,'#ffe8c0'); g.addColorStop(0.3,'#ffcc80'); g.addColorStop(1,'transparent');
+  oc.fillStyle=g; oc.fillRect(0,0,W,H);
+  oc.globalAlpha=0.04;
+  const streak=oc.createLinearGradient(0,cy,W,cy);
+  streak.addColorStop(0,'transparent'); streak.addColorStop(0.5,'#ffe0a0'); streak.addColorStop(1,'transparent');
+  oc.fillStyle=streak; oc.fillRect(0,cy-H*0.04,W,H*0.08);
+  oc.restore();
+}
+
+function applyHalationTo(oc, W, H) {
+  const imageData=oc.getImageData(0,0,W,H); const d=imageData.data;
+  const hal=oc.createImageData(W,H); const hd=hal.data;
+  for(let i=0;i<d.length;i+=4){
+    const lum=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+    if(lum>210){const t=(lum-210)/45; hd[i]=clamp(d[i]+80*t); hd[i+1]=clamp(d[i+1]*(1-t*0.4)); hd[i+2]=clamp(d[i+2]*(1-t*0.6)); hd[i+3]=clamp(200*t);}
+  }
+  const tmp=document.createElement('canvas'); tmp.width=W; tmp.height=H;
+  const tc=tmp.getContext('2d'); tc.putImageData(hal,0,0);
+  tc.filter=`blur(${Math.round(W*0.012)}px)`; tc.drawImage(tmp,0,0);
+  oc.save(); oc.globalCompositeOperation='screen'; oc.globalAlpha=0.45; oc.drawImage(tmp,0,0); oc.restore();
+}
+
+function applyGrainTo(oc, W, H) {
+  const imageData=oc.getImageData(0,0,W,H); const d=imageData.data;
+  const grainAmount=18;
+  for(let i=0;i<d.length;i+=4){
+    const lum=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+    const sensitivity=1-Math.pow(lum/255,1.5);
+    const noise=(Math.random()-0.5)*grainAmount*sensitivity*2;
+    d[i]=clamp(d[i]+noise); d[i+1]=clamp(d[i+1]+noise*0.95); d[i+2]=clamp(d[i+2]+noise*0.9);
+  }
+  oc.putImageData(imageData,0,0);
+}
+</script>
+</body>
+</html>
